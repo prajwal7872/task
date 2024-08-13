@@ -9,6 +9,7 @@ class MapWithPolygon extends StatefulWidget {
 }
 
 class _MapWithPolygonState extends State<MapWithPolygon> {
+  GoogleMapController? _mapController;
   final Set<Polygon> _polygons = {
     Polygon(
       polygonId: const PolygonId('polygon_id'),
@@ -24,7 +25,15 @@ class _MapWithPolygonState extends State<MapWithPolygon> {
     ),
   };
 
-  void _onMapCreated(GoogleMapController controller) {}
+  void _onMapCreated(GoogleMapController controller) {
+    _mapController = controller;
+  }
+
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

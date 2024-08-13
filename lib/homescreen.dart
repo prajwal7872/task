@@ -1,144 +1,149 @@
-// // ignore_for_file: avoid_print
-// ignore_for_file: avoid_print
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
 import 'package:task/model.dart';
 
-Future<FormModel> fetchFormModel() async {
-  const url =
-      'https://gateway.cronlink.ca/api/v1/authentication/companies-listing';
-  final response = await http.get(Uri.parse(url));
+Future<List<FormData>> fetchFormData() async {
+  final response = await http.get(Uri.parse(
+      'https://gateway.cronlink.ca/api/v1/authentication/companies-listing'));
 
   if (response.statusCode == 200) {
-    print('Response Data: ${response.body}');
-    final data = json.decode(response.body) as Map<String, dynamic>;
-
-    if (data.containsKey('data') && data['data'] is Map<String, dynamic>) {
-      final nestedData = data['data'] as Map<String, dynamic>;
-      if (nestedData.containsKey('forms')) {
-        return FormModel.fromJson(nestedData['forms'] as List<dynamic>?);
-      }
-    }
-    throw Exception('No forms key found in JSON');
+    List jsonResponse = json.decode(response.body);
+    print(jsonResponse);
+    return jsonResponse.map((data) => FormData.fromJson(data)).toList();
   } else {
-    throw Exception('Failed to load form data');
+    throw Exception('Failed to load data');
   }
 }
 
-class FormScreen extends StatefulWidget {
-  const FormScreen({super.key});
+class FormDisplayScreen extends StatefulWidget {
+  const FormDisplayScreen({super.key});
 
   @override
-  State<FormScreen> createState() => _FormScreenState();
+  State<FormDisplayScreen> createState() => _FormDisplayScreenState();
 }
 
-class _FormScreenState extends State<FormScreen> {
-  late Future<FormModel> formModel;
+class _FormDisplayScreenState extends State<FormDisplayScreen> {
+  late Future<List<FormData>> futureFormData;
 
   @override
   void initState() {
     super.initState();
-    formModel = fetchFormModel();
+    futureFormData = fetchFormData();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dynamic Form'),
+        title: const Text('Form Data'),
       ),
-      body: FutureBuilder<FormModel>(
-        future: formModel,
+      body: FutureBuilder<List<FormData>>(
+        future: futureFormData,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          } else if (snapshot.hasData) {
+          if (snapshot.hasData) {
             return ListView.builder(
-              itemCount: snapshot.data!.forms.length,
-              itemBuilder: (context, index) {
-                var form = snapshot.data!.forms[index];
-                return Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        form.title,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      ...form.fields.map((field) {
-                        switch (field.fieldType) {
-                          case 'TextInput':
-                            print(
-                                'Rendering TextInput for field: ${field.label}');
-                            return TextFormField(
-                              initialValue: field.value,
-                              decoration: InputDecoration(
-                                labelText: field.label,
-                              ),
-                            );
-                          case 'FormElementSignature':
-                            print(
-                                'Rendering Signature field for: ${field.label}');
-                            return Container();
-                          case 'DatetimePicker':
-                            print(
-                                'Rendering DatetimePicker for field: ${field.label}');
-                            return Container();
-                          case 'SwitchInput':
-                            print(
-                                'Rendering SwitchInput for field: ${field.label}');
-                            return SwitchListTile(
-                              title: Text(field.label),
-                              value: field.value ?? false,
-                              onChanged: (bool value) {
-                                setState(() {
-                                  field.value = value;
-                                });
-                              },
-                            );
-                          case 'SelectList':
-                            print(
-                                'Rendering SelectList for field: ${field.label}');
-                            return DropdownButtonFormField<String>(
-                              decoration:
-                                  InputDecoration(labelText: field.label),
-                              value: field.value,
-                              items: field.options
-                                  ?.map<DropdownMenuItem<String>>((option) {
-                                return DropdownMenuItem<String>(
-                                  value: option['optionValue'],
-                                  child: Text(option['optionLabel']),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                setState(() {
-                                  field.value = newValue;
-                                });
-                              },
-                            );
-                          default:
-                            print('Unknown field type: ${field.fieldType}');
-                            return Container();
-                        }
-                      })
-                    ],
-                  ),
+              itemCount: snapshot.data?.length,
+              itemBuilder: (context, formIndex) {
+                var formData = snapshot.data![formIndex];
+                return Column(
+                  children: formData.fields.map((field) {
+                    return _buildField(field, formIndex);
+                  }).toList(),
                 );
               },
             );
-          } else {
-            return const Center(child: Text('No Data'));
+          } else if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
+
+          return const Center(child: CircularProgressIndicator());
         },
       ),
     );
+  }
+
+  Widget _buildField(Field field, int formIndex) {
+    switch (field.fieldType) {
+      case 'TextInput':
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: TextField(
+            decoration: InputDecoration(
+              labelText: field.label,
+              enabled: !field.disabled,
+            ),
+            onChanged: (value) {
+              setState(() {
+                var updatedField = field.copyWith(value: value);
+                _updateField(updatedField, formIndex);
+              });
+            },
+          ),
+        );
+      case 'FormElementSignature':
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Text(field.text),
+        );
+      case 'DatetimePicker':
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: Text(field.text),
+        );
+      case 'SwitchInput':
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: SwitchListTile(
+            title: Text(field.label),
+            value: field.value ?? false,
+            onChanged: (bool value) {
+              setState(() {
+                var updatedField = field.copyWith(value: value);
+                _updateField(updatedField, formIndex);
+              });
+            },
+          ),
+        );
+      case 'SelectList':
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0),
+          child: DropdownButtonFormField(
+            decoration: InputDecoration(labelText: field.label),
+            value: field.value is String ? field.value : null,
+            items: (field.value is List
+                ? (field.value as List).map<DropdownMenuItem>((item) {
+                    return DropdownMenuItem(
+                      value: item['optionValue'],
+                      child: Text(item['optionLabel']),
+                    );
+                  }).toList()
+                : []),
+            onChanged: (newValue) {
+              setState(() {
+                var updatedField = field.copyWith(value: newValue);
+                _updateField(updatedField, formIndex);
+              });
+            },
+          ),
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  void _updateField(Field updatedField, int formIndex) {
+    setState(() {
+      futureFormData = futureFormData.then((formDataList) {
+        var updatedFields = List<Field>.from(formDataList[formIndex].fields);
+        var fieldIndex =
+            updatedFields.indexWhere((f) => f.name == updatedField.name);
+        if (fieldIndex != -1) {
+          updatedFields[fieldIndex] = updatedField;
+        }
+        formDataList[formIndex] = FormData(fields: updatedFields);
+        return formDataList;
+      });
+    });
   }
 }
